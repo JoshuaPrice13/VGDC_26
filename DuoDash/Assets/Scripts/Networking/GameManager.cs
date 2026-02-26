@@ -26,7 +26,10 @@ public class GameManager : MonoBehaviourPunCallbacks
     [Header("Scene References")]
     public BallController ball;
     public ChunkSpawner chunkSpawner;
-    public CameraController cameraController;
+
+    [Header("UI Panels")]
+    public GameObject lobbyPanel;
+    public GameObject waitingRoomPanel;
 
     [Header("Handoff Settings")]
     [Tooltip("Seconds of dramatic pause between Player 1 dying and Player 2 taking over.")]
@@ -77,9 +80,27 @@ public class GameManager : MonoBehaviourPunCallbacks
     /// <summary>Called by the host's Start button. Generates seed and broadcasts RPC_StartLevel.</summary>
     public void HostStartGame()
     {
+        Debug.Log("HostStartGame func started");
         if (!PhotonNetwork.IsMasterClient) return;
         int seed = Random.Range(0, int.MaxValue);
         pv.RPC(nameof(RPC_StartLevel), RpcTarget.All, seed, 1);
+    }
+
+    /// <summary>
+    /// Starts the game locally without Photon. Used by TestSceneBootstrapper.
+    /// All subsequent game calls (lane change, death) also bypass RPCs when not connected.
+    /// </summary>
+    public void StartLocalGame()
+    {
+        int seed = Random.Range(0, int.MaxValue);
+        CurrentLevel = 1;
+        p1UsedTurn = false;
+        p2UsedTurn = false;
+        activeActorNumber = 1;
+        State = GameState.Playing;
+        chunkSpawner.Initialize(seed);
+        ball.ResetBall();
+        Debug.Log($"[GameManager] Local test started. Seed: {seed}");
     }
 
     /// <summary>
@@ -96,17 +117,23 @@ public class GameManager : MonoBehaviourPunCallbacks
     /// <summary>
     /// Called by InputHandler when the local player taps.
     /// Broadcasts the lane change to both clients so both simulations stay in sync.
+    /// When not connected to Photon, applies the lane change directly.
     /// </summary>
     public void LocalRequestLaneChange(int direction)
     {
         if (!IsLocalPlayerActive()) return;
         if (State != GameState.Playing) return;
-        pv.RPC(nameof(RPC_ChangeLane), RpcTarget.All, direction);
+
+        if (!PhotonNetwork.IsConnected)
+            RPC_ChangeLane(direction);
+        else
+            pv.RPC(nameof(RPC_ChangeLane), RpcTarget.All, direction);
     }
 
     /// <summary>Called by BallController when the ball hits an obstacle.</summary>
     public void OnBallDied(Vector3 position, Vector3 velocity)
     {
+        Debug.Log("GM: hit obstacle");
         if (!IsLocalPlayerActive()) return;
         if (State != GameState.Playing) return;
 
@@ -116,7 +143,10 @@ public class GameManager : MonoBehaviourPunCallbacks
         else
             p2Distance = position.z;
 
-        pv.RPC(nameof(RPC_PlayerDied), RpcTarget.All, position, velocity);
+        if (!PhotonNetwork.IsConnected)
+            RPC_PlayerDied(position, velocity);
+        else
+            pv.RPC(nameof(RPC_PlayerDied), RpcTarget.All, position, velocity);
     }
 
     // -------------------------------------------------------------------------
@@ -138,6 +168,9 @@ public class GameManager : MonoBehaviourPunCallbacks
 
         activeActorNumber = PhotonNetwork.MasterClient.ActorNumber; // Player 1 always goes first
 
+        if (lobbyPanel != null) lobbyPanel.SetActive(false);
+        if (waitingRoomPanel != null) waitingRoomPanel.SetActive(false);
+
         State = GameState.Playing;
 
         chunkSpawner.Initialize(seed);
@@ -156,12 +189,14 @@ public class GameManager : MonoBehaviourPunCallbacks
 
     /// <summary>
     /// Called when the active player's ball dies.
-    /// Passes the exact position + velocity so the next player's ball is placed correctly.
+    /// Resets the ball to the start of the level and hands off to the next player after a delay.
     /// </summary>
     [PunRPC]
     void RPC_PlayerDied(Vector3 position, Vector3 velocity)
     {
-        bool masterClientDied = activeActorNumber == PhotonNetwork.MasterClient.ActorNumber;
+        // When not connected there is no master client — treat the single player as P1.
+        bool masterClientDied = !PhotonNetwork.IsConnected
+            || activeActorNumber == PhotonNetwork.MasterClient.ActorNumber;
 
         if (masterClientDied) p1UsedTurn = true;
         else p2UsedTurn = true;
@@ -173,21 +208,21 @@ public class GameManager : MonoBehaviourPunCallbacks
             return;
         }
 
-        // Handoff to the other player
+        // Handoff: reset ball to start, switch active player, then resume after delay
         State = GameState.HandoffPause;
 
         Player otherPlayer = GetOtherPlayer();
         if (otherPlayer != null)
             activeActorNumber = otherPlayer.ActorNumber;
 
-        ball.SetState(position, velocity);
+        ball.ResetBall();
         ball.ResetInputState();
 
         // UIManager.Instance.PlayHandoffEffect();  // HOOK: screen flash, audio sting
 
         Invoke(nameof(CompleteHandoff), handoffPauseDuration);
 
-        Debug.Log($"[GameManager] Handoff. New active player: {activeActorNumber}");
+        Debug.Log($"[GameManager] Handoff. Ball reset to start. New active player: {activeActorNumber}");
     }
 
     void CompleteHandoff()
@@ -219,19 +254,23 @@ public class GameManager : MonoBehaviourPunCallbacks
     // Helpers
     // -------------------------------------------------------------------------
 
-    /// <summary>Returns true if the local Photon player is the currently active runner.</summary>
+    /// <summary>Returns true if the local player is the currently active runner.
+    /// When not connected to Photon, always returns true.</summary>
     public bool IsLocalPlayerActive()
     {
+        if (!PhotonNetwork.IsConnected) return true;
         return PhotonNetwork.LocalPlayer.ActorNumber == activeActorNumber;
     }
 
     private bool IsLocalPlayerOne()
     {
+        if (!PhotonNetwork.IsConnected) return true;
         return PhotonNetwork.LocalPlayer.ActorNumber == PhotonNetwork.MasterClient.ActorNumber;
     }
 
     private Player GetOtherPlayer()
     {
+        if (!PhotonNetwork.IsConnected) return null;
         foreach (Player p in PhotonNetwork.PlayerList)
             if (p.ActorNumber != activeActorNumber) return p;
         return null;

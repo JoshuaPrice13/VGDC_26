@@ -81,6 +81,7 @@ public class ChunkSpawner : MonoBehaviour
 
     void SpawnAhead()
     {
+        if (chunkPrefabs == null || chunkPrefabs.Length == 0) return;
         float spawnThreshold = ballTransform.position.z + chunksAheadCount * chunkLength;
         while (nextSpawnZ < spawnThreshold)
             SpawnNextChunk();

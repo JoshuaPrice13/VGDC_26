@@ -99,6 +99,7 @@ public class NetworkLobbyManager : MonoBehaviourPunCallbacks
             IsVisible = false // room is private, join by code only
         };
         PhotonNetwork.CreateRoom(code, options);
+        Debug.Log("Photon has created a room for you! Code : " + code);
     }
 
     public void OnJoinRoomPressed()
@@ -109,17 +110,21 @@ public class NetworkLobbyManager : MonoBehaviourPunCallbacks
             Debug.LogWarning("[Lobby] No room code entered.");
             return;
         }
+        waitingRoomPanel.SetActive(false);
         PhotonNetwork.JoinRoom(code);
     }
 
     public void OnStartGamePressed()
     {
-        if (!PhotonNetwork.IsMasterClient) return;
+        Debug.Log("Trying to start game!");
+        waitingRoomPanel.SetActive(false);
+        if (!PhotonNetwork.IsMasterClient) waitingRoomPanel.SetActive(false);
         if (PhotonNetwork.CurrentRoom.PlayerCount < 2)
         {
             Debug.LogWarning("[Lobby] Cannot start — need 2 players.");
             return;
         }
+        waitingRoomPanel.SetActive(false);
         GameManager.Instance.HostStartGame();
     }
 
@@ -130,7 +135,7 @@ public class NetworkLobbyManager : MonoBehaviourPunCallbacks
     private void RefreshWaitingUI()
     {
         int count = PhotonNetwork.CurrentRoom.PlayerCount;
-        waitingStatusText.text = count < 2 ? "Waiting for opponent..." : "Both players connected!";
+        waitingStatusText.text = count < 2 ? "Waiting for partner..." : "Both players connected!";
 
         // Start button only shown to host, enabled only when both players present
         bool isHost = PhotonNetwork.IsMasterClient;
@@ -141,7 +146,7 @@ public class NetworkLobbyManager : MonoBehaviourPunCallbacks
     private static string GenerateRoomCode()
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars (0/O, 1/I)
-        char[] code = new char[6];
+        char[] code = new char[3];
         for (int i = 0; i < code.Length; i++)
             code[i] = chars[Random.Range(0, chars.Length)];
         return new string(code);

@@ -14,6 +14,7 @@ public class ObstacleCollision : MonoBehaviour
 
         BallController ball = other.GetComponent<BallController>();
         if (ball != null)
+            Debug.Log("Hit obstcle");
             ball.OnHitObstacle();
     }
 }

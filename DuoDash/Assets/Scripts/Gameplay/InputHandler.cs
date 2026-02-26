@@ -37,6 +37,10 @@ public class InputHandler : MonoBehaviour
         // ---- Mouse (editor / PC testing) ----
         if (Input.GetMouseButtonDown(0))
             SendLaneChange(Input.mousePosition.x);
+
+        // ---- Keyboard (WebGL / desktop testing) ----
+        if (Input.GetKeyDown(KeyCode.A)) GameManager.Instance.LocalRequestLaneChange(-1);
+        if (Input.GetKeyDown(KeyCode.D)) GameManager.Instance.LocalRequestLaneChange(1);
     }
 
     void SendLaneChange(float screenX)

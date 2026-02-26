@@ -23,6 +23,8 @@ public class BallController : MonoBehaviour
     [Tooltip("How quickly the ball slides to the target lane. Higher = snappier.")]
     public float laneSlideSpeed = 12f;
 
+    public GameObject startPos;
+
     // -------------------------------------------------------------------------
     // Internal State
     // -------------------------------------------------------------------------
@@ -105,7 +107,7 @@ public class BallController : MonoBehaviour
         targetLane = 1;
         queuedDirection = 0;
 
-        transform.position = Vector3.zero;
+        transform.position = startPos.transform.position;
         rb.velocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
     }
